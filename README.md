@@ -1,37 +1,5 @@
 # Min-Displacement Legalizer — Macro Placement Challenge 2026
 
-## Team
-- Kevin Wang (wanghaochuankevin@gmail.com, GitHub: KevinChunye)
-
-## Method: Min-Displacement Legalizer
-
-A legalization-based macro placer that starts from the benchmark's initial
-placement and resolves all hard macro overlaps through minimum-displacement
-shifts while preserving placement quality.
-
-### Key Ideas
-
-1. **Start from initial placement** — The provided hand-crafted placements
-   already have excellent wirelength/density/congestion quality. Rather than
-   placing from scratch, we treat this as a legalization problem: resolve
-   overlaps with minimal perturbation.
-
-2. **Multi-pass greedy overlap resolution** — Iteratively identifies overlapping
-   macro pairs and shifts them apart using minimum-displacement separation
-   vectors. Larger macros get priority.
-
-3. **Proxy-aware spiral search** — When greedy shifting creates new overlaps,
-   a spiral search finds the nearest non-overlapping position that minimizes
-   incremental HPWL (half-perimeter wirelength) delta. Only nets touching the
-   moved macro are re-evaluated (O(nets_per_macro) per candidate).
-
-4. **Make-room for large macros** — Before placing a large macro, temporarily
-   displaces blocking smaller macros, places the large macro near its original
-   position, then re-legalizes the smaller macros.
-
-5. **Swap fallback** — If overlap resolution stalls, attempts position swaps
-   between overlapping macro pairs.
-
 ### Architecture
 
 ```
