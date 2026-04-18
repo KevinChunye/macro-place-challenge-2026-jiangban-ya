@@ -1,6 +1,6 @@
 # Min-Displacement Legalizer — Macro Placement Challenge 2026
 
-**Team Jiangban Ya** · Kevin (Haochuan) Wang · `hcw@mit.edu`
+**Team Jiangban Ya** 
 
 Most teams treated the challenge as "optimize, then legalize." We inverted the pipeline: the IBM benchmarks' hand-crafted initial layouts already have strong wirelength, density, and congestion — so re-optimizing from scratch risks destroying quality that's already there. Our placer never moves a macro unless it has to.
 
