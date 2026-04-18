@@ -19,6 +19,12 @@ Most teams treated the challenge as "optimize, then legalize." We inverted the p
 
 **Result:** avg proxy **1.4944** across 17 IBM benchmarks (~2.5% better than RePlAce), zero overlaps, ~188s avg — pure NumPy, no learning, no external solver.
 
+### Scope and Assumption
+
+This submission is framed as a **legalizer**, not a from-scratch placer. It assumes the input has an initial placement with exploitable structure — which is exactly what the IBM and NG45 benchmarks provide (hand-crafted for IBM; OpenROAD analytical/grouping output for NG45). On a cold, random initialization the algorithm would still produce a zero-overlap layout in bounded time, but it would inherit the random layout's wirelength and congestion — "garbage in, legal garbage out."
+
+The natural extension, for pipelines where no useful prior exists, is to drop any fast global placer (force-directed, analytical, DREAMPlace) in front as a seeding step and then run this legalizer to finish. That's strictly better than the traditional "optimize-then-legalize" pipeline because legalization here is explicitly *displacement-bounded* against a reference, not rediscovering topology from scratch. We measure the prior-sensitivity quantitatively in the repo's noise-sweep results (`results/noise_sweep_summary.md`).
+
 ### Architecture
 
 ```
