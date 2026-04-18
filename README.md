@@ -9,15 +9,15 @@ Most teams treated the challenge as "optimize, then legalize." We inverted the p
   <em>ibm01 — resolving 85 hard-macro overlaps with minimum-displacement shifts. Avg proxy cost 1.0891, ~20s runtime.</em>
 </p>
 
-**What's in the frame:**
-- **Hard macro** (blue): the large fixed-size blocks we're placing — SRAMs, IPs, analog blocks. These are the only objects the algorithm moves.
-- **Just moved** (orange): a hard macro that was shifted in the current legalization step (greedy pair resolution or spiral search).
-- **Soft cluster** (pink): pre-placed standard-cell clusters. Static scenery — we don't move them, but hard macros must not overlap them.
-- **Overlap Convergence** (right): number of hard-macro pairs still overlapping. The legalizer terminates when this hits zero.
+**What you're seeing:**
+- **Blue — hard macros:** big fixed-size blocks (SRAMs, IPs). The *only* things our algorithm moves.
+- **Orange — just moved:** a hard macro that shifted in this step.
+- **Pink — soft clusters:** groups of standard-cell logic the benchmark already placed. Not empty space — it's occupied. Putting a macro on top is legal, but hurts density and routing cost.
+- **Right plot:** how many hard-macro pairs still overlap. We stop at zero.
 
-**Pipeline:** (1) multi-pass greedy pair-wise overlap resolution via minimum-displacement vectors, (2) proxy-aware spiral search that re-evaluates only the nets touching the moved macro, (3) "make-room" pass that temporarily displaces smaller blockers for large macros, (4) swap fallback when local resolution stalls.
+**How it works:** start from the benchmark's hand-crafted layout (which is already good) and only nudge the macros that overlap. Four passes — greedy min-displacement shifts, a proxy-aware spiral search, a "make-room" move for large macros, and a swap fallback — fix everything with the smallest possible perturbation.
 
-**Result:** avg proxy **1.4944** across all 17 IBM benchmarks (~2.5% better than RePlAce), zero overlaps, ~188s avg per benchmark — pure NumPy, no learning, no external solver.
+**Result:** avg proxy **1.4944** across 17 IBM benchmarks (~2.5% better than RePlAce), zero overlaps, ~188s avg — pure NumPy, no learning, no external solver.
 
 ### Architecture
 
