@@ -1,5 +1,24 @@
 # Min-Displacement Legalizer — Macro Placement Challenge 2026
 
+**Team Jiangban Ya** · Kevin (Haochuan) Wang · `hcw@mit.edu`
+
+Most teams treated the challenge as "optimize, then legalize." We inverted the pipeline: the IBM benchmarks' hand-crafted initial layouts already have strong wirelength, density, and congestion — so re-optimizing from scratch risks destroying quality that's already there. Our placer never moves a macro unless it has to.
+
+<p align="center">
+  <img src="assets/mindisp_ibm01.gif" alt="Min-Displacement Legalizer on ibm01" width="620"><br>
+  <em>ibm01 — resolving 85 hard-macro overlaps with minimum-displacement shifts. Avg proxy cost 1.0891, ~20s runtime.</em>
+</p>
+
+**What's in the frame:**
+- **Hard macro** (blue): the large fixed-size blocks we're placing — SRAMs, IPs, analog blocks. These are the only objects the algorithm moves.
+- **Just moved** (orange): a hard macro that was shifted in the current legalization step (greedy pair resolution or spiral search).
+- **Soft cluster** (pink): pre-placed standard-cell clusters. Static scenery — we don't move them, but hard macros must not overlap them.
+- **Overlap Convergence** (right): number of hard-macro pairs still overlapping. The legalizer terminates when this hits zero.
+
+**Pipeline:** (1) multi-pass greedy pair-wise overlap resolution via minimum-displacement vectors, (2) proxy-aware spiral search that re-evaluates only the nets touching the moved macro, (3) "make-room" pass that temporarily displaces smaller blockers for large macros, (4) swap fallback when local resolution stalls.
+
+**Result:** avg proxy **1.4944** across all 17 IBM benchmarks (~2.5% better than RePlAce), zero overlaps, ~188s avg per benchmark — pure NumPy, no learning, no external solver.
+
 ### Architecture
 
 ```
