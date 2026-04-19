@@ -1018,3 +1018,4 @@ def legalize(
     if verbose:
         print(f"  Final: {len(final_pairs)} overlaps remaining")
     return pos, log
+
