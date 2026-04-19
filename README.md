@@ -15,6 +15,11 @@ Prior-adaptive two-phase macro placer. Detects initial placement quality via HPW
 - **Pink — soft clusters:** groups of standard-cell logic the benchmark already placed. Macros can't overlap them without hurting density and routing cost.
 - **Right plot:** how many hard-macro pairs still overlap. We stop at zero.
 
+<p align="center">
+  <img src="assets/spectral_ibm01.png" alt="ibm01 final placement — density and congestion" width="820"><br>
+  <em>ibm01 final placement (left), density map (centre), and congestion map (right). Macros are spread across the canvas with no overlaps. The density heatmap confirms balanced area utilisation; the congestion hotspot in the centre-right reflects the netlist's natural clustering — macros that are heavily connected are placed close together, concentrating routing demand where it should be.</em>
+</p>
+
 ## Algorithm
 
 ```
