@@ -5,7 +5,7 @@
 Prior-adaptive two-phase macro placer. Detects initial placement quality via HPWL ratio and routes to the appropriate strategy: expert IBM priors get direct legalization (zero perturbation to the global structure); noisy or random inits get a connectivity-aware spectral global layout first, then legalization.
 
 <p align="center">
-  <img src="assets/mindisp_ibm01.gif" alt="SpectralPlacer on ibm01" width="620"><br>
+  <img src="assets/spectral_ibm01.png" alt="SpectralPlacer on ibm01" width="620"><br>
   <em>ibm01 — SpectralPlacer detects the expert IBM prior (hpwl_ratio=0.059 → spectral_alpha=0.00) and resolves 85 hard-macro overlaps with minimum-displacement shifts. Proxy cost 1.0891, 31s runtime.</em>
 </p>
 
