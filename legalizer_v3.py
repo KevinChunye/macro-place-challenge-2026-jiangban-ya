@@ -256,7 +256,7 @@ def build_conflict_components(pairs, n_hard):
 
 # ── Spiral search ────────────────────────────────────────────────────────────
 
-def spiral_search_single(idx, pos, sizes, movable, n_hard, cw, ch, gap=0.001):
+def spiral_search_single(idx, pos, sizes, movable, n_hard, cw, ch, gap=0.001, max_rings=50):
     if not movable[idx]:
         return False, 0.0
     orig_x, orig_y = pos[idx, 0], pos[idx, 1]
@@ -265,7 +265,7 @@ def spiral_search_single(idx, pos, sizes, movable, n_hard, cw, ch, gap=0.001):
     step = max(sizes[idx, 0], sizes[idx, 1]) * 0.15
     best_pos = None
     best_dist = float("inf")
-    for r in range(1, 300):
+    for r in range(1, max_rings + 1):
         found = False
         for dxm in range(-r, r + 1):
             for dym in range(-r, r + 1):
@@ -287,7 +287,7 @@ def spiral_search_single(idx, pos, sizes, movable, n_hard, cw, ch, gap=0.001):
 
 # ── Make-room for large macros ───────────────────────────────────────────────
 
-def make_room_and_place(large_idx, pos, sizes, movable, n_hard, cw, ch, gap=0.001):
+def make_room_and_place(large_idx, pos, sizes, movable, n_hard, cw, ch, gap=0.001, max_rings=50):
     """Temporarily displace blocking small macros, place large macro, re-legalize."""
     orig_large = (pos[large_idx, 0], pos[large_idx, 1])
     large_area = sizes[large_idx, 0] * sizes[large_idx, 1]
@@ -307,7 +307,7 @@ def make_room_and_place(large_idx, pos, sizes, movable, n_hard, cw, ch, gap=0.00
                 blockers.append(j)
 
     if not blockers:
-        ok, disp = spiral_search_single(large_idx, pos, sizes, movable, n_hard, cw, ch, gap)
+        ok, disp = spiral_search_single(large_idx, pos, sizes, movable, n_hard, cw, ch, gap, max_rings=max_rings)
         return ok, disp, []
 
     blocker_orig = {b: (pos[b, 0], pos[b, 1]) for b in blockers}
@@ -327,7 +327,7 @@ def make_room_and_place(large_idx, pos, sizes, movable, n_hard, cw, ch, gap=0.00
     else:
         pos[large_idx, 0], pos[large_idx, 1] = orig_large
         large_ok, large_disp = spiral_search_single(
-            large_idx, pos, sizes, movable, n_hard, cw, ch, gap)
+            large_idx, pos, sizes, movable, n_hard, cw, ch, gap, max_rings=max_rings)
 
     if not large_ok:
         pos[large_idx, 0], pos[large_idx, 1] = orig_large
@@ -342,7 +342,7 @@ def make_room_and_place(large_idx, pos, sizes, movable, n_hard, cw, ch, gap=0.00
         if not macro_has_any_overlap(b, pos, sizes, n_hard, gap=gap):
             small_results.append((b, 0.0))
         else:
-            ok, disp = spiral_search_single(b, pos, sizes, movable, n_hard, cw, ch, gap)
+            ok, disp = spiral_search_single(b, pos, sizes, movable, n_hard, cw, ch, gap, max_rings=max_rings)
             small_results.append((b, disp if ok else 0.0))
 
     return True, large_disp, small_results
@@ -352,7 +352,7 @@ def make_room_and_place(large_idx, pos, sizes, movable, n_hard, cw, ch, gap=0.00
 
 def resolve_component(
     component, pos, sizes, movable, n_hard, cw, ch,
-    net_index, pos_all, gap=0.001, max_perm=120
+    net_index, pos_all, gap=0.001, max_perm=120, max_rings=50
 ):
     """Try permutations; pick ordering minimizing incremental HPWL delta."""
     if not component:
@@ -404,7 +404,7 @@ def resolve_component(
 
             if midx in large_macros:
                 ok, disp, small_results = make_room_and_place(
-                    midx, pos, sizes, movable, n_hard, cw, ch, gap)
+                    midx, pos, sizes, movable, n_hard, cw, ch, gap, max_rings=max_rings)
                 result.append((midx, disp))
                 for si, sd in small_results:
                     if sd > 0:
@@ -413,7 +413,7 @@ def resolve_component(
                     all_ok = False; break
             else:
                 ok, disp = spiral_search_single(
-                    midx, pos, sizes, movable, n_hard, cw, ch, gap)
+                    midx, pos, sizes, movable, n_hard, cw, ch, gap, max_rings=max_rings)
                 result.append((midx, disp))
                 if not ok:
                     all_ok = False; break
@@ -512,6 +512,67 @@ def reduce_displacement(
         print(f"  Displacement reduction: {reduction:.4f}um reduced "
               f"({reduction/max(total_before, 1e-9)*100:.1f}%)")
 
+    return pos
+
+
+# ── Force-spread pass (Jacobi-style batch overlap elimination) ───────────────
+
+def force_spread_pass(pos, sizes, movable, n_hard, cw, ch, gap=0.001, n_passes=30):
+    """Push all overlapping pairs apart simultaneously (Jacobi style).
+
+    Unlike the Gauss-Seidel greedy pass, all pushes in a single sweep are
+    accumulated before being applied, so fixing one pair doesn't cascade into
+    breaking another in the same pass. This converges reliably on dense random
+    inits where the greedy approach stalls.
+
+    Each pair is pushed along the axis of smaller overlap (minimum displacement).
+    Run for at most n_passes or until no overlaps remain.
+    Returns modified pos array.
+    """
+    for _ in range(n_passes):
+        pairs = find_overlapping_pairs(pos, sizes, n_hard)
+        if not pairs:
+            break
+        deltas = np.zeros((n_hard, 2))
+        counts = np.zeros(n_hard)
+        for i, j, _, _, _ in pairs:
+            if not movable[i] and not movable[j]:
+                continue
+            dx = pos[i, 0] - pos[j, 0]
+            dy = pos[i, 1] - pos[j, 1]
+            need_x = (sizes[i, 0] + sizes[j, 0]) / 2 + gap
+            need_y = (sizes[i, 1] + sizes[j, 1]) / 2 + gap
+            ox = need_x - abs(dx)
+            oy = need_y - abs(dy)
+            if ox <= 0 or oy <= 0:
+                continue
+            if ox <= oy:
+                push = ox / 2 + 1e-5
+                sx = 1.0 if dx >= 0 else -1.0
+                if movable[i] and movable[j]:
+                    deltas[i, 0] += sx * push;  counts[i] += 1
+                    deltas[j, 0] -= sx * push;  counts[j] += 1
+                elif movable[i]:
+                    deltas[i, 0] += sx * push * 2;  counts[i] += 1
+                else:
+                    deltas[j, 0] -= sx * push * 2;  counts[j] += 1
+            else:
+                push = oy / 2 + 1e-5
+                sy = 1.0 if dy >= 0 else -1.0
+                if movable[i] and movable[j]:
+                    deltas[i, 1] += sy * push;  counts[i] += 1
+                    deltas[j, 1] -= sy * push;  counts[j] += 1
+                elif movable[i]:
+                    deltas[i, 1] += sy * push * 2;  counts[i] += 1
+                else:
+                    deltas[j, 1] -= sy * push * 2;  counts[j] += 1
+        for k in range(n_hard):
+            if movable[k] and counts[k] > 0:
+                pos[k, 0] += deltas[k, 0]
+                pos[k, 1] += deltas[k, 1]
+                hw = sizes[k, 0] / 2;  hh = sizes[k, 1] / 2
+                pos[k, 0] = np.clip(pos[k, 0], hw, cw - hw)
+                pos[k, 1] = np.clip(pos[k, 1], hh, ch - hh)
     return pos
 
 
@@ -704,6 +765,7 @@ def legalize(
     stall_patience=3,
     gap=0.001,
     verbose=True,
+    max_rings=50,
 ):
     n_hard = benchmark.num_hard_macros
     pos = benchmark.macro_positions[:n_hard].numpy().copy().astype(np.float64)
@@ -722,6 +784,8 @@ def legalize(
     log = []
     best_overlap_count = float("inf")
     stall_count = 0
+    spiral_stall_count = 0
+    spiral_baseline = float("inf")
 
     for iteration in range(max_iters):
         pairs = find_overlapping_pairs(pos, sizes, n_hard)
@@ -766,7 +830,7 @@ def legalize(
             for ci, comp in enumerate(components):
                 result = resolve_component(
                     comp, pos, sizes, movable, n_hard, cw, ch,
-                    net_index, pos_all, gap
+                    net_index, pos_all, gap, max_rings=max_rings
                 )
                 for midx, disp in result:
                     if disp > 0:
@@ -792,6 +856,27 @@ def legalize(
 
             if len(pairs_after) == 0:
                 break
+
+            # Track whether spiral itself is making progress
+            if len(pairs_after) < spiral_baseline:
+                spiral_baseline = len(pairs_after)
+                spiral_stall_count = 0
+            else:
+                spiral_stall_count += 1
+                if spiral_stall_count >= 2:
+                    if verbose:
+                        print(f"  Spiral stalled at {len(pairs_after)} overlaps. "
+                              f"Activating force-spread pass...")
+                    pos = force_spread_pass(
+                        pos, sizes, movable, n_hard, cw, ch, gap, n_passes=30)
+                    spiral_stall_count = 0
+                    spiral_baseline = float("inf")
+                    pairs_after = find_overlapping_pairs(pos, sizes, n_hard)
+                    if verbose:
+                        print(f"  After force-spread: {len(pairs_after)} overlaps remain")
+                    if len(pairs_after) == 0:
+                        break
+
             best_overlap_count = len(pairs_after)
             stall_count = 0
             continue
@@ -896,6 +981,30 @@ def legalize(
                         pos[anchor, 0] = oa[0]
 
     final_pairs = find_overlapping_pairs(pos, sizes, n_hard)
+    if len(final_pairs) > 0:
+        # Last resort: aggressive force-spread on the remaining stuck pairs
+        if verbose:
+            print(f"  {len(final_pairs)} overlaps after swap fallback. "
+                  f"Last-resort force-spread (100 passes)...")
+        pos = force_spread_pass(pos, sizes, movable, n_hard, cw, ch, gap, n_passes=100)
+        final_pairs = find_overlapping_pairs(pos, sizes, n_hard)
+        if verbose:
+            print(f"  After last-resort spread: {len(final_pairs)} overlaps")
+
+        if len(final_pairs) > 0:
+            # Targeted high-ring spiral on only the stuck macros (fast: 1-2 macros)
+            if verbose:
+                print(f"  Targeted 200-ring spiral on {len(final_pairs)} stuck pair(s)...")
+            stuck = set()
+            for si, sj, _, _, _ in final_pairs:
+                stuck.add(si); stuck.add(sj)
+            for midx in sorted(stuck):
+                spiral_search_single(midx, pos, sizes, movable, n_hard, cw, ch, gap,
+                                     max_rings=200)
+            final_pairs = find_overlapping_pairs(pos, sizes, n_hard)
+            if verbose:
+                print(f"  After targeted spiral: {len(final_pairs)} overlaps")
+
     if len(final_pairs) == 0:
         pos = reduce_displacement(
             pos, benchmark.macro_positions[:n_hard].numpy().astype(np.float64),
